@@ -1,13 +1,15 @@
-Adicionar TELNET Linux
+Adicionar TELNET
 	apt update && sudo apt upgrade
 	apt install sudo
 	usermod -aG sudo root
 	sudo whoami
-	sudo apt install telnetd
-	sudo update-inetd --enable telnet
-	sudo service inetutils-inetd restart
-	service inetutils-inetd status
 	sudo apt install telnet
+	
+	Se necessário isso abaixo:
+		sudo apt install telnetd
+		sudo update-inetd --enable telnet
+		sudo service inetutils-inetd restart
+		service inetutils-inetd status
 
 Commands Docker
 	 sudo service docker start (inicia docker no linux)
