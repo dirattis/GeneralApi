@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: genial-inovacao-acaopremiada-api-config
+  namespace: acaopremiada
+data:
+  ASPNETCORE_ENVIRONMENT: Production

@@ -1,0 +1,34 @@
+﻿Commands Docker
+	 sudo service docker start (inicia docker no linux)
+	 sudo service docker stop  (para o docker no linux)
+	 
+	 docker build -t <nome-imagem>  --network=host -f <Dockerfile> <diretorio de contexto do Dockerfile> (Cria imagem)
+	 docker run --rm -d -p 8080:8080 <nome-imagem> (Cria e roda container)
+	 docker ps -a (lista todos os containers)
+	 docker ps (lista containers rodando)
+	 docker rm -f <container-id or name> (deleta container)
+	 docker rmi -f $(docker images -aq) (deleta todas as imagems)
+	 docker rmi -f <image-id or name repository> (deleta imagem)
+
+Commands EKSCTL
+	eksctl create cluster -n GeneralApiDemo -r us-east-1 -t t3.micro
+	eksctl delete cluster -n GeneralApiDemo -r us-east-1
+	aws eks update-kubeconfig --region sa-east-1 --name eks-cluster-pro-acaopremiada --profile diego.rattis
+
+Commands kubectl
+	kubectl expose deployment general-api --type=LoadBalancer --name=general-api-service
+	kubectl get pods --namespace acaopremiada
+	kubectl config set-context --current --namespace=<NOME_DO_NAMESPACE> (setar um namespace default para o contexto do kubectl)
+	kubectl apply -f configmap.yaml (aplicar um novo configMap ao cluster)
+	kubectl replace -f configmap.yaml (atualizar um configMap existente do cluster)
+	kubectl get configmap -n meu-namespace (Verificar se configMap foi aplicado)
+	kubectl get <RESOURCE_TYPE/RESOURCE_NAME> --namespace=<NAMESPACE> -o yaml > deployment.yaml (Obter deployment e jogar em arquivo)
+	Ex do comando acima:  
+		kubectl get deployment/genial-inovacao-acaopremiada-api --namespace=acaopremiada -o yaml > deployment.yaml
+	k9s -n <NAMESPACE> (abrir K9S no contexto de determinado namespace)
+	kubectl get pod <nome-do-pod> -o jsonpath='{.spec.containers[*].name}' (Obter os nomes dos containers de um POD)
+	kubectl logs <Nome do POD> -c <Nome do Container> (Obter logs de um determinado container do POD, se desejar ver todos os logs de todos os containers é só remover o parâmetro -c. 
+														Para monitorar os logs em tempo real, basta adicionar o parâmetro -f antes do nome do POD.
+														Para obter apenas as linhas mais recentes, use o atributo --tail=100 por exemplo, onde o número 100 é o número de linhas de log)
+	Ex do comando acima: 
+		kubectl logs -p genial-inovacao-acaopremiada-api-57d5fb54c8-2qhbn -c api

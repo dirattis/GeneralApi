@@ -1,0 +1,161 @@
+name: EKS Deployment Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Log in to Amazon ECR
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_PRO }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_PRO }}
+      run: |
+        aws ecr get-login-password --region ${{ secrets.AWS_REGION_PRO }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com
+
+    - name: Build Docker Image
+      run: |
+        # get the repository name
+        REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
+        RESOURCE_NAME=$(echo $REPO_NAME | tr '[:upper:]' '[:lower:]' | sed 's/\./-/g')
+        echo "Nome do repositório: $REPO_NAME"
+        echo "Nome do recurso: $RESOURCE_NAME"
+
+        echo "Showing Dockerfile Content..."
+        cat $REPO_NAME/Dockerfile
+
+        echo "Building Docker Image..."
+        docker build -t ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com/$RESOURCE_NAME:latest -f $REPO_NAME/Dockerfile .
+        docker tag ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com/$RESOURCE_NAME:latest ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com/$RESOURCE_NAME:${{ github.sha }}
+
+    - name: Push Docker Image
+      run: |
+        # get the repository name
+        REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
+        RESOURCE_NAME=$(echo $REPO_NAME | tr '[:upper:]' '[:lower:]' | sed 's/\./-/g')
+
+        echo "Nome do repositório: $REPO_NAME"
+        echo "Nome do recurso: $RESOURCE_NAME"
+        
+        docker push ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com/$RESOURCE_NAME:latest
+        docker push ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com/$RESOURCE_NAME:${{ github.sha }}
+
+  deploy-hml:
+    runs-on: runner-eks-cluster-pro-acaopremiada
+    needs: build
+    environment:
+      name: 'homolog'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl
+        curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
+
+    - name: Deploy to Kubernetes       
+      run: |
+        REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
+        RESOURCE_NAME=$(echo $REPO_NAME | tr '[:upper:]' '[:lower:]' | sed 's/\./-/g')
+        RESOURCE_TYPE="deployment"
+        NAMESPACE="acaopremiada-hml"
+
+        echo "Nome do repositório: $REPO_NAME"
+        echo "Nome do recurso: $RESOURCE_NAME"
+        echo "Tipo de recurso: $RESOURCE_TYPE"
+        echo "Namespace: $NAMESPACE"
+        
+        echo "Getting deployments..."
+        kubectl get $RESOURCE_TYPE --namespace=$NAMESPACE 
+
+        echo "Update deployment image..."
+        kubectl get $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE -o yaml > deployment.yaml
+
+        echo "Showing deployment.yaml do recurso $RESOURCE_NAME..."
+        cat deployment.yaml
+
+        sed -i "s|image: .*|image: ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com/$RESOURCE_NAME:${{ github.sha }}|g" deployment.yaml
+
+        echo "Updating deployment image..."
+        kubectl apply -f deployment.yaml --namespace=$NAMESPACE
+        #kubectl replace -f deployment.yaml --force --grace-period=0 --namespace=$NAMESPACE
+
+        echo "Getting deployment status..."
+        kubectl rollout status $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE
+
+        echo "Getting deployment description..."
+        kubectl describe $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE
+
+        echo "Getting deployment history..."
+        kubectl rollout history $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE
+
+
+  deploy-pro:
+    runs-on: runner-eks-cluster-pro-acaopremiada
+    needs: deploy-hml
+    environment:
+      name: 'production'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl
+        curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
+
+    - name: Deploy to Kubernetes       
+      run: |
+        REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
+        RESOURCE_NAME=$(echo $REPO_NAME | tr '[:upper:]' '[:lower:]' | sed 's/\./-/g')
+        RESOURCE_TYPE="deployment"
+        NAMESPACE="acaopremiada"
+
+        echo "Nome do repositório: $REPO_NAME"
+        echo "Nome do recurso: $RESOURCE_NAME"
+        echo "Tipo de recurso: $RESOURCE_TYPE"
+        echo "Namespace: $NAMESPACE"
+        
+        echo "Getting deployments..."
+        kubectl get $RESOURCE_TYPE --namespace=$NAMESPACE 
+
+        echo "Update deployment image..."
+        kubectl get $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE -o yaml > deployment.yaml
+
+        echo "Showing deployment.yaml do recurso $RESOURCE_NAME..."
+        cat deployment.yaml
+
+        sed -i "s|image: .*|image: ${{ secrets.AWS_ACCOUNT_ID_PRO }}.dkr.ecr.${{ secrets.AWS_REGION_PRO }}.amazonaws.com/$RESOURCE_NAME:${{ github.sha }}|g" deployment.yaml
+
+        echo "Updating deployment image..."
+        kubectl apply -f deployment.yaml --namespace=$NAMESPACE
+        #kubectl replace -f deployment.yaml --force --grace-period=0 --namespace=$NAMESPACE
+
+        echo "Getting deployment status..."
+        kubectl rollout status $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE
+
+        echo "Getting deployment description..."
+        kubectl describe $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE
+
+        echo "Getting deployment history..."
+        kubectl rollout history $RESOURCE_TYPE/$RESOURCE_NAME --namespace=$NAMESPACE
